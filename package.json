@@ -1,0 +1,13 @@
+{
+  "name": "ryyn-proxy-core",
+  "version": "1.0.0",
+  "description": "Proxy Core System by Ryyn",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}
