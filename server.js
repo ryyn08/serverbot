@@ -22,7 +22,7 @@ let liveLogs = ["[SYSTEM] Proxy Core Engine aktif."];
 function addLog(msg) {
     const time = new Date().toLocaleTimeString();
     liveLogs.push(`[${time}] ${msg}`);
-    if (liveLogs.length > 30) liveLogs.shift();
+    if (liveLogs.length > 40) liveLogs.shift();
 }
 
 // Loop Otomatis: Mengatur fluktuasi ping, Auto-Disconnect (>=150ms) & Auto-Reconnect (<150ms)
@@ -36,7 +36,6 @@ setInterval(() => {
                 return;
             }
 
-            // Naik turunkan ping secara acak kawan
             const change = Math.floor(Math.random() * 60) - 30;
             srv.latency = Math.max(20, srv.latency + change);
 
@@ -69,40 +68,28 @@ app.get('/api/servers', (req, res) => {
 
 app.get('/api/logs', (req, res) => res.json(liveLogs));
 
-// API Kontrol Admin (Kill / Start)
+// API Kontrol Admin (Kill / Start) via Nama Server
 app.post('/api/control', (req, res) => {
-    const { id, action } = req.body;
+    const { name, action } = req.body;
     let db = readDB();
-    const srv = db.servers.find(s => s.id === parseInt(id));
+    const srv = db.servers.find(s => s.name === name);
 
     if (srv) {
         if (action === "kill") {
             srv.killedByAdmin = true;
             srv.status = "OFFLINE";
             srv.latency = 0;
-            addLog(`ADMIN: Kill Server ID ${id}`);
+            addLog(`ADMIN: Kill Paksa Server [${name}]`);
         } else if (action === "start") {
             srv.killedByAdmin = false;
             srv.status = "ONLINE";
             srv.latency = 50;
-            addLog(`ADMIN: Start Server ID ${id}`);
+            addLog(`ADMIN: Menyalakan Ulang Server [${name}]`);
         }
         writeDB(db);
         return res.json({ success: true });
     }
-    res.status(404).json({ error: "Not found" });
-});
-
-// Endpoint Request Simpel untuk Bot WhatsApp kamu: https://domain/server/1
-app.get('/server/:id', (req, res) => {
-    const srvId = parseInt(req.params.id);
-    const db = readDB();
-    const srv = db.servers.find(s => s.id === srvId);
-
-    if (!srv || srv.status === "OFFLINE" || srv.killedByAdmin) {
-        return res.json({ "server": srvId, "creator": "Ryyn", "status": "disconnect", "ms": "lockdown" });
-    }
-    res.json({ "server": srvId, "creator": "Ryyn", "status": "connect", "ms": `${srv.latency}ms` });
+    res.status(404).json({ error: "Server tidak ditemukan" });
 });
 
 app.listen(PORT, () => console.log(`Backend run on port ${PORT}`));
