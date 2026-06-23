@@ -10,68 +10,91 @@ app.use(express.json());
 
 const dbPath = path.join(__dirname, 'server.json');
 
+// Fungsi membaca file server.json secara aman
 function readDB() {
-    return JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    try {
+        if (!fs.existsSync(dbPath)) {
+            console.log("File server.json tidak ditemukan!");
+            return { servers: [] };
+        }
+        const rawData = fs.readFileSync(dbPath, 'utf8');
+        return JSON.parse(rawData);
+    } catch (err) {
+        console.error("Gagal membaca server.json, format rusak:", err.message);
+        return { servers: [] };
+    }
 }
 
+// Fungsi menulis kembali ke file server.json secara rapi
 function writeDB(data) {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+    try {
+        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (err) {
+        console.error("Gagal menulis ke server.json:", err.message);
+    }
 }
 
-let liveLogs = ["[SYSTEM] Proxy Core Engine aktif."];
+let liveLogs = ["[SYSTEM] Proxy Core Engine aktif mendengarkan database."];
 function addLog(msg) {
     const time = new Date().toLocaleTimeString();
     liveLogs.push(`[${time}] ${msg}`);
     if (liveLogs.length > 40) liveLogs.shift();
 }
 
-// Loop Otomatis: Mengatur fluktuasi ping, Auto-Disconnect (>=150ms) & Auto-Reconnect (<150ms)
+// Loop Otomatis: Update database server.json secara real-time tiap 2.5 detik
 setInterval(() => {
-    try {
-        let db = readDB();
-        db.servers.forEach(srv => {
-            if (srv.killedByAdmin) {
+    let db = readDB();
+    if (!db.servers || db.servers.length === 0) return;
+
+    db.servers.forEach(srv => {
+        // Jika dimatikan admin, status mutlak OFFLINE
+        if (srv.killedByAdmin === true || srv.killedByAdmin === "true") {
+            srv.status = "OFFLINE";
+            srv.latency = 0;
+            return;
+        }
+
+        // Naik turunkan latency secara wajar berdasarkan data lama di server.json
+        const change = Math.floor(Math.random() * 40) - 20; 
+        srv.latency = Math.max(15, (srv.latency || 50) + change);
+
+        // Logic Auto Reconnect / Disconnect berdasarkan indikator latency
+        if (srv.latency >= 150) {
+            if (srv.status === "ONLINE") {
                 srv.status = "OFFLINE";
-                srv.latency = 0;
-                return;
+                addLog(`CRITICAL: Node [${srv.id}] ${srv.name} down -> ${srv.latency}ms`);
             }
-
-            const change = Math.floor(Math.random() * 60) - 30;
-            srv.latency = Math.max(20, srv.latency + change);
-
-            if (srv.latency >= 150) {
-                if (srv.status === "ONLINE") {
-                    srv.status = "OFFLINE";
-                    addLog(`REQ_ERR: Server ${srv.id} (${srv.name}) dc -> ${srv.latency}ms`);
-                }
-            } else {
-                if (srv.status === "OFFLINE") {
-                    srv.status = "ONLINE";
-                    addLog(`REQ_CONN: Server ${srv.id} (${srv.name}) up -> ${srv.latency}ms`);
-                }
+        } else {
+            if (srv.status === "OFFLINE") {
+                srv.status = "ONLINE";
+                addLog(`CONNECTED: Node [${srv.id}] ${srv.name} up -> ${srv.latency}ms`);
             }
-        });
-        writeDB(db);
-    } catch (e) {}
+        }
+    });
+
+    writeDB(db);
 }, 2500);
 
-// API Monitor untuk Website
+// API GET: Mengirimkan data asli dari server.json ke website monitor lu
 app.get('/api/servers', (req, res) => {
-    const clientIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const db = readDB();
     res.json({
-        clientIp: clientIp,
-        system: { cpu: Math.floor(Math.random() * 20) + 5 + "%", ram: Math.floor(Math.random() * 50) + 120 + " MB" },
-        servers: db.servers
+        servers: db.servers || []
     });
 });
 
-app.get('/api/logs', (req, res) => res.json(liveLogs));
+// API GET: Mengambil logs terminal backend
+app.get('/api/logs', (req, res) => {
+    res.json(liveLogs);
+});
 
-// API Kontrol Admin (Kill / Start) via Nama Server
+// API POST: Kontrol Kill/Run dari Admin Panel mengubah status di server.json
 app.post('/api/control', (req, res) => {
     const { name, action } = req.body;
     let db = readDB();
+    
+    if (!db.servers) return res.status(500).json({ error: "Data server kosong" });
+    
     const srv = db.servers.find(s => s.name === name);
 
     if (srv) {
@@ -79,17 +102,21 @@ app.post('/api/control', (req, res) => {
             srv.killedByAdmin = true;
             srv.status = "OFFLINE";
             srv.latency = 0;
-            addLog(`ADMIN: Kill Paksa Server [${name}]`);
+            addLog(`ADMIN_CONTROL: Menghentikan paksa server [${name}]`);
         } else if (action === "start") {
             srv.killedByAdmin = false;
             srv.status = "ONLINE";
-            srv.latency = 50;
-            addLog(`ADMIN: Menyalakan Ulang Server [${name}]`);
+            srv.latency = 45;
+            addLog(`ADMIN_CONTROL: Menyalakan kembali server [${name}]`);
         }
         writeDB(db);
         return res.json({ success: true });
     }
-    res.status(404).json({ error: "Server tidak ditemukan" });
+    
+    res.status(404).json({ error: "Nama server tidak valid" });
 });
 
-app.listen(PORT, () => console.log(`Backend run on port ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Backend Server Sukses Berjalan di Port ${PORT}`);
+    addLog(`[SYSTEM] Cloudflare Tunnel endpoint siap dihubungkan.`);
+});
