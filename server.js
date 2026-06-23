@@ -1,4 +1,4 @@
-const express = require('express');
+        const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
@@ -10,27 +10,29 @@ app.use(express.json());
 
 const dbPath = path.join(__dirname, 'server.json');
 
-// Fungsi membaca file server.json secara aman
+// Fungsi membaca file server.json secara aman & anti-corrupt
 function readDB() {
     try {
         if (!fs.existsSync(dbPath)) {
-            console.log("File server.json tidak ditemukan!");
+            console.log("[ERROR] File server.json tidak ditemukan!");
             return { servers: [] };
         }
         const rawData = fs.readFileSync(dbPath, 'utf8');
+        if (!rawData.trim()) return { servers: [] };
         return JSON.parse(rawData);
     } catch (err) {
-        console.error("Gagal membaca server.json, format rusak:", err.message);
-        return { servers: [] };
+        console.error("[ERROR] Gagal parsing server.json:", err.message);
+        return null; // Return null jika format rusak agar tidak menimpa file asli
     }
 }
 
 // Fungsi menulis kembali ke file server.json secara rapi
 function writeDB(data) {
     try {
+        if (!data) return;
         fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf8');
     } catch (err) {
-        console.error("Gagal menulis ke server.json:", err.message);
+        console.error("[ERROR] Gagal menulis ke server.json:", err.message);
     }
 }
 
@@ -41,24 +43,26 @@ function addLog(msg) {
     if (liveLogs.length > 40) liveLogs.shift();
 }
 
-// Loop Otomatis: Update database server.json secara real-time tiap 2.5 detik
+// Loop Otomatis: Update fluktuasi latency dan status langsung ke file server.json
 setInterval(() => {
     let db = readDB();
-    if (!db.servers || db.servers.length === 0) return;
+    // Jika data tidak terbaca atau kosong, lewati biar gak nge-blank / corrupt
+    if (!db || !db.servers || db.servers.length === 0) return;
 
     db.servers.forEach(srv => {
-        // Jika dimatikan admin, status mutlak OFFLINE
+        // Cek switch killedByAdmin secara ketat (string atau boolean)
         if (srv.killedByAdmin === true || srv.killedByAdmin === "true") {
             srv.status = "OFFLINE";
             srv.latency = 0;
             return;
         }
 
-        // Naik turunkan latency secara wajar berdasarkan data lama di server.json
-        const change = Math.floor(Math.random() * 40) - 20; 
-        srv.latency = Math.max(15, (srv.latency || 50) + change);
+        // Naik turunkan latency acak secara wajar (-20ms s/ad +20ms)
+        const change = Math.floor(Math.random() * 40) - 20;
+        let currentLatency = parseInt(srv.latency) || 50;
+        srv.latency = Math.max(15, currentLatency + change);
 
-        // Logic Auto Reconnect / Disconnect berdasarkan indikator latency
+        // Logic Auto Reconnect / Disconnect berdasarkan batas latency 150ms
         if (srv.latency >= 150) {
             if (srv.status === "ONLINE") {
                 srv.status = "OFFLINE";
@@ -75,12 +79,13 @@ setInterval(() => {
     writeDB(db);
 }, 2500);
 
-// API GET: Mengirimkan data asli dari server.json ke website monitor lu
+// API GET: Mengirimkan data array dari server.json ke website monitor lu
 app.get('/api/servers', (req, res) => {
     const db = readDB();
-    res.json({
-        servers: db.servers || []
-    });
+    if (!db || !db.servers) {
+        return res.json({ servers: [] });
+    }
+    res.json({ servers: db.servers });
 });
 
 // API GET: Mengambil logs terminal backend
@@ -93,8 +98,9 @@ app.post('/api/control', (req, res) => {
     const { name, action } = req.body;
     let db = readDB();
     
-    if (!db.servers) return res.status(500).json({ error: "Data server kosong" });
+    if (!db || !db.servers) return res.status(500).json({ error: "Database server.json kosong atau rusak" });
     
+    // Cari server berdasarkan properti 'name' yang dikirim dari UI
     const srv = db.servers.find(s => s.name === name);
 
     if (srv) {
@@ -113,7 +119,7 @@ app.post('/api/control', (req, res) => {
         return res.json({ success: true });
     }
     
-    res.status(404).json({ error: "Nama server tidak valid" });
+    res.status(404).json({ error: "Nama server tidak ditemukan di database" });
 });
 
 app.listen(PORT, () => {
