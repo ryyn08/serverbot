@@ -1,0 +1,12 @@
+{
+  "servers": [
+    { "id": 1, "name": "Server 1 Canada", "ip": "98.142.250.14", "latency": 45, "status": "ONLINE", "killedByAdmin": false },
+    { "id": 2, "name": "Server 2 Singapore", "ip": "98.142.250.14", "latency": 60, "status": "ONLINE", "killedByAdmin": false },
+    { "id": 3, "name": "Server Hong Kong", "ip": "104.21.82.187", "latency": 70, "status": "ONLINE", "killedByAdmin": false },
+    { "id": 4, "name": "Server Poland", "ip": "188.114.96.11", "latency": 110, "status": "ONLINE", "killedByAdmin": false },
+    { "id": 5, "name": "Server Switzerland", "ip": "188.114.96.12", "latency": 95, "status": "ONLINE", "killedByAdmin": false },
+    { "id": 6, "name": "Server Turkey", "ip": "188.114.97.7", "latency": 120, "status": "ONLINE", "killedByAdmin": false },
+    { "id": 7, "name": "Server Austria", "ip": "188.114.96.10", "latency": 50, "status": "ONLINE", "killedByAdmin": false },
+    { "id": 8, "name": "Server Brazil", "ip": "172.67.162.58", "latency": 135, "status": "ONLINE", "killedByAdmin": false }
+  ]
+}
